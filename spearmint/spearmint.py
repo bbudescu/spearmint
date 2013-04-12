@@ -450,7 +450,10 @@ def save_expt(filename, expt):
     fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
     fh.write(text_format.MessageToString(expt))
     fh.close()
-    cmd = 'mv "%s" "%s"' % (fh.name, filename)
+	if os.name =='nt':
+        cmd = 'move "%s" "%s"' % (fh.name, filename)
+    else:
+		cmd = 'mv "%s" "%s"' % (fh.name, filename)
     os.system(cmd)
 
 def save_job(filename, job):
@@ -458,7 +461,11 @@ def save_job(filename, job):
     #fh.write(text_format.MessageToString(job))
     fh.write(job.SerializeToString())
     fh.close()
-    cmd = 'mv "%s" "%s"' % (fh.name, filename)
+	
+	if os.name =='nt':
+        cmd = 'move "%s" "%s"' % (fh.name, filename)
+    else:
+		cmd = 'mv "%s" "%s"' % (fh.name, filename)
     os.system(cmd)
 
 def sge_submit(name, output_file, modules, job_file, working_dir):

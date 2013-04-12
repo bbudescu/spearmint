@@ -32,8 +32,9 @@ import scipy.stats    as sps
 import scipy.optimize as spo
 import cPickle
 import multiprocessing
+import time
 
-from Locker import *
+from lockfile import FileLock
 
 def optimize_pt(c, b, comp, pend, vals, model):
     ret = spo.fmin_l_bfgs_b(model.grad_optimize_ei_over_hypers,
@@ -57,8 +58,8 @@ class GPEIOptChooser:
                  pending_samples=100, noiseless=False, burnin=100,
                  grid_subset=20):
         self.cov_func        = getattr(gp, covar)
-        self.locker          = Locker()
         self.state_pkl       = os.path.join(expt_dir, self.__module__ + ".pkl")
+        self.state_lock      = FileLock(self.state_pkl)
         self.stats_file      = os.path.join(expt_dir, 
                                    self.__module__ + "_hyperparameters.txt")
         self.mcmc_iters      = int(mcmc_iters)
@@ -78,24 +79,25 @@ class GPEIOptChooser:
 
     def dump_hypers(self):
         sys.stderr.write("Waiting to lock hyperparameter pickle...")
-        self.locker.lock_wait(self.state_pkl)
-        sys.stderr.write("...acquired\n")
-
-        # Write the hyperparameters out to a Pickle.
-        fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
-        cPickle.dump({ 'dims'   : self.D,
-                       'ls'     : self.ls,
-                       'amp2'   : self.amp2,
-                       'noise'  : self.noise,
-                       'mean'   : self.mean },
-                     fh)
-        fh.close()
-
-        # Use an atomic move for better NFS happiness.
-        cmd = 'mv "%s" "%s"' % (fh.name, self.state_pkl)
-        os.system(cmd) # TODO: Should check system-dependent return status.
-
-        self.locker.unlock(self.state_pkl)
+        with self.state_lock:
+            sys.stderr.write("...acquired\n")
+    
+            # Write the hyperparameters out to a Pickle.
+            fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
+            cPickle.dump({ 'dims'   : self.D,
+                           'ls'     : self.ls,
+                           'amp2'   : self.amp2,
+                           'noise'  : self.noise,
+                           'mean'   : self.mean },
+                         fh)
+            fh.close()
+    
+            # Use an atomic move for better NFS happiness.
+            if os.name =='nt':
+            	cmd = 'move "%s" "%s"' % (fh.name, self.state_pkl)
+            else:
+    			cmd = 'mv "%s" "%s"' % (fh.name, self.state_pkl)
+            os.system(cmd) # TODO: Should check system-dependent return status.
 
         # Write the hyperparameters out to a human readable file as well
         fh    = open(self.stats_file, 'w')
@@ -117,44 +119,42 @@ class GPEIOptChooser:
             
     def _real_init(self, dims, values):        
         sys.stderr.write("Waiting to lock hyperparameter pickle...")
-        self.locker.lock_wait(self.state_pkl)
-        sys.stderr.write("...acquired\n")
-
-        self.randomstate = npr.get_state()
-        if os.path.exists(self.state_pkl):
-            fh    = open(self.state_pkl, 'r')
-            state = cPickle.load(fh)
-            fh.close()
-
-            self.D     = state['dims']
-            self.ls    = state['ls']
-            self.amp2  = state['amp2']
-            self.noise = state['noise']
-            self.mean  = state['mean']
-
-            self.needs_burnin = False
-        else:
-
-            # Input dimensionality.
-            self.D = dims
-
-            # Initial length scales.
-            self.ls = np.ones(self.D)
-
-            # Initial amplitude.
-            self.amp2 = np.std(values)
-
-            # Initial observation noise.
-            self.noise = 1e-3
-
-            # Initial mean.
-            self.mean = np.mean(values)
-            
-            # Save hyperparameter samples
-            self.hyper_samples.append((self.mean, self.noise, self.amp2, 
-                                       self.ls))
-
-        self.locker.unlock(self.state_pkl)
+        with self.state_lock:
+            sys.stderr.write("...acquired\n")
+    
+            self.randomstate = npr.get_state()
+            if os.path.exists(self.state_pkl):
+                fh    = open(self.state_pkl, 'r')
+                state = cPickle.load(fh)
+                fh.close()
+    
+                self.D     = state['dims']
+                self.ls    = state['ls']
+                self.amp2  = state['amp2']
+                self.noise = state['noise']
+                self.mean  = state['mean']
+    
+                self.needs_burnin = False
+            else:
+    
+                # Input dimensionality.
+                self.D = dims
+    
+                # Initial length scales.
+                self.ls = np.ones(self.D)
+    
+                # Initial amplitude.
+                self.amp2 = np.std(values)
+    
+                # Initial observation noise.
+                self.noise = 1e-3
+    
+                # Initial mean.
+                self.mean = np.mean(values)
+                
+                # Save hyperparameter samples
+                self.hyper_samples.append((self.mean, self.noise, self.amp2, 
+                                           self.ls))
 
     def cov(self, x1, x2=None):
         if x2 is None:
@@ -224,16 +224,16 @@ class GPEIOptChooser:
 
             # This is old code to optimize each point in parallel. Uncomment
             # and replace if multiprocessing doesn't work
-            #for i in xrange(0, cand2.shape[0]):
-            #    sys.stderr.write("Optimizing candidate %d/%d\n" %
-            #                     (i+1, cand2.shape[0]))
-            #self.check_grad_ei(cand2[i,:].flatten(), comp, pend, vals)
-            #    ret = spo.fmin_l_bfgs_b(self.grad_optimize_ei_over_hypers,
-            #                            cand2[i,:].flatten(), args=(comp,pend,vals),
-            #                            bounds=b, disp=0)
-            #    cand2[i,:] = ret[0]
-
-            #cand = np.vstack((cand, cand2))
+#             for i in xrange(0, cand2.shape[0]):
+#                 sys.stderr.write("Optimizing candidate %d/%d\n" %
+#                                  (i+1, cand2.shape[0]))
+#                 self.check_grad_ei(cand2[i,:].flatten(), comp, pend, vals)
+#                 ret = spo.fmin_l_bfgs_b(self.grad_optimize_ei_over_hypers,
+#                                         cand2[i,:].flatten(), args=(comp,pend,vals),
+#                                         bounds=b, disp=0)
+#                 cand2[i,:] = ret[0]
+# 
+#             cand = np.vstack((cand, cand2))
 
             # Optimize each point in parallel
             pool = multiprocessing.Pool(self.grid_subset)

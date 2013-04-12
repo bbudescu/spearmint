@@ -27,7 +27,6 @@ import time
 import imp
 import os
 import re
-import Locker
 
 from google.protobuf import text_format
 from spearmint_pb2   import *
@@ -404,29 +403,34 @@ def load_job(filename):
     return job
 
 def save_expt(filename, expt):
-    fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
+    fh = tempfile.NamedTemporaryFile(mode='wb', delete=False)
     fh.write(text_format.MessageToString(expt))
     fh.close()
-    cmd = 'mv "%s" "%s"' % (fh.name, filename)
+    
+    if os.name == 'nt':
+        cmd = 'move "%s" "%s"' % (fh.name, filename)
+    else:
+        cmd = 'mv "%s" "%s"' % (fh.name, filename)
+        
     subprocess.check_call(cmd, shell=True)
 
 def save_job(filename, job):
-    fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
+    fh = tempfile.NamedTemporaryFile(mode='wb', delete=False)
     #fh.write(text_format.MessageToString(job))
     fh.write(job.SerializeToString())
     fh.close()
-    cmd = 'mv "%s" "%s"' % (fh.name, filename)
+    if os.name == 'nt':
+        cmd = 'move "%s" "%s"' % (fh.name, filename)
+    else:
+        cmd = 'mv "%s" "%s"' % (fh.name, filename)
     subprocess.check_call(cmd, shell=True)
 
 def job_submit(name, output_file, job_file, working_dir):
 
-    cmd = ('''python spearmint_sync.py --wrapper "%s" > %s''' % 
-           (job_file, output_file))
+    cmd = ('''python spearmint_sync.py --wrapper "%s"''' % 
+           (job_file))
     output_file = open(output_file, 'w')
 
-    # Submit the job.
-    locker = Locker()
-    locker.unlock(working_dir + '/expt-grid.pkl')
     process = subprocess.Popen(cmd,
                                stdout=output_file,
                                stderr=output_file, shell=True)

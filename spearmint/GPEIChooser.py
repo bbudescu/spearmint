@@ -31,7 +31,7 @@ import scipy.stats    as sps
 import scipy.optimize as spo
 import cPickle
 
-from Locker import *
+from lockfile import FileLock
 
 def init(expt_dir, arg_string):
     args = util.unpack_args(arg_string)
@@ -48,8 +48,8 @@ class GPEIChooser:
     def __init__(self, expt_dir, covar="Matern52", mcmc_iters=10, 
                  pending_samples=100, noiseless=False):
         self.cov_func        = getattr(gp, covar)
-        self.locker          = Locker()
         self.state_pkl       = os.path.join(expt_dir, self.__module__ + ".pkl")
+        self.state_lock      = FileLock(self.state_pkl)
 
         self.mcmc_iters      = int(mcmc_iters)
         self.pending_samples = pending_samples
@@ -63,59 +63,58 @@ class GPEIChooser:
 
     def __del__(self):
         sys.stderr.write("Waiting to lock hyperparameter pickle...")
-        self.locker.lock_wait(self.state_pkl)
-        sys.stderr.write("...acquired\n")
-
-        # Write the hyperparameters out to a Pickle.
-        fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
-        cPickle.dump({ 'dims'   : self.D,
-                       'ls'     : self.ls,
-                       'amp2'   : self.amp2,
-                       'noise'  : self.noise,
-                       'mean'   : self.mean },
-                     fh)
-        fh.close()
-
-        # Use an atomic move for better NFS happiness.
-        cmd = 'mv "%s" "%s"' % (fh.name, self.state_pkl)
-        os.system(cmd) # TODO: Should check system-dependent return status.
-
-        self.locker.unlock(self.state_pkl)
+        with self.state_lock:
+            sys.stderr.write("...acquired\n")
+    
+            # Write the hyperparameters out to a Pickle.
+            fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
+            cPickle.dump({ 'dims'   : self.D,
+                           'ls'     : self.ls,
+                           'amp2'   : self.amp2,
+                           'noise'  : self.noise,
+                           'mean'   : self.mean },
+                         fh)
+            fh.close()
+    
+            # Use an atomic move for better NFS happiness.
+            if os.name =='nt':
+    			cmd = 'move "%s" "%s"' % (fh.name, self.state_pkl)
+            else:
+    			cmd = 'mv "%s" "%s"' % (fh.name, self.state_pkl)
+            os.system(cmd) # TODO: Should check system-dependent return status.
 
     def _real_init(self, dims, values):
         
         sys.stderr.write("Waiting to lock hyperparameter pickle...")
-        self.locker.lock_wait(self.state_pkl)
-        sys.stderr.write("...acquired\n")
-
-        if os.path.exists(self.state_pkl):            
-            fh    = open(self.state_pkl, 'r')
-            state = cPickle.load(fh)
-            fh.close()
-
-            self.D     = state['dims']
-            self.ls    = state['ls']
-            self.amp2  = state['amp2']
-            self.noise = state['noise']
-            self.mean  = state['mean']
-        else:
-
-            # Input dimensionality.
-            self.D = dims
-
-            # Initial length scales.
-            self.ls = np.ones(self.D)
-
-            # Initial amplitude.
-            self.amp2 = np.std(values)
-
-            # Initial observation noise.
-            self.noise = 1e-3
-
-            # Initial mean.
-            self.mean = np.mean(values)
-
-        self.locker.unlock(self.state_pkl)
+        with self.state_lock:
+            sys.stderr.write("...acquired\n")
+    
+            if os.path.exists(self.state_pkl):            
+                fh    = open(self.state_pkl, 'r')
+                state = cPickle.load(fh)
+                fh.close()
+    
+                self.D     = state['dims']
+                self.ls    = state['ls']
+                self.amp2  = state['amp2']
+                self.noise = state['noise']
+                self.mean  = state['mean']
+            else:
+    
+                # Input dimensionality.
+                self.D = dims
+    
+                # Initial length scales.
+                self.ls = np.ones(self.D)
+    
+                # Initial amplitude.
+                self.amp2 = np.std(values)
+    
+                # Initial observation noise.
+                self.noise = 1e-3
+    
+                # Initial mean.
+                self.mean = np.mean(values)
 
     def cov(self, x1, x2=None):
         if x2 is None:
