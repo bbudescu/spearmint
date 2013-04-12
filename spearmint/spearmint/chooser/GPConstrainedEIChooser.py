@@ -35,9 +35,8 @@ import matplotlib.pyplot as plt
 import multiprocessing
 import copy
 
+from lockfile import FileLock
 from helpers import *
-from Locker  import *
-
 # Wrapper function to pass to parallel ei optimization calls
 def optimize_pt(c, b, comp, pend, vals, labels, model):
     ret = spo.fmin_l_bfgs_b(model.grad_optimize_ei_over_hypers,
@@ -65,8 +64,8 @@ class GPConstrainedEIChooser:
                  grid_subset=20, constraint_violating_value=np.inf,
                  verbosity=0, visualize2D=False):
         self.cov_func        = getattr(gp, covar)
-        self.locker          = Locker()
         self.state_pkl       = os.path.join(expt_dir, self.__module__ + ".pkl")
+        self.state_lock      = FileLock(self.state_pkl)
 
         self.stats_file      = os.path.join(expt_dir,
                                    self.__module__ + "_hyperparameters.txt")
@@ -99,27 +98,29 @@ class GPConstrainedEIChooser:
     # A simple function to dump out hyperparameters to allow for a hot start
     # if the optimization is restarted.
     def dump_hypers(self):
-        self.locker.lock_wait(self.state_pkl)
-
-        # Write the hyperparameters out to a Pickle.
-        fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
-        cPickle.dump({ 'dims'        : self.D,
-                       'ls'          : self.ls,
-                       'amp2'        : self.amp2,
-                       'noise'       : self.noise,
-                       'mean'        : self.mean,
-                       'constraint_ls'     : self.constraint_ls,
-                       'constraint_amp2'   : self.constraint_amp2,
-                       'constraint_noise'  : self.constraint_noise,
-                       'constraint_mean'   : self.constraint_mean },
-                     fh)
-        fh.close()
-
-        # Use an atomic move for better NFS happiness.
-        cmd = 'mv "%s" "%s"' % (fh.name, self.state_pkl)
-        os.system(cmd) # TODO: Should check system-dependent return status.
-
-        self.locker.unlock(self.state_pkl)
+        with self.state_lock:
+            sys.stderr.write("...acquired\n")
+    
+            # Write the hyperparameters out to a Pickle.
+            fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
+            cPickle.dump({ 'dims'        : self.D,
+                           'ls'          : self.ls,
+                           'amp2'        : self.amp2,
+                           'noise'       : self.noise,
+                           'mean'        : self.mean,
+                           'constraint_ls'     : self.constraint_ls,
+                           'constraint_amp2'   : self.constraint_amp2,
+                           'constraint_noise'  : self.constraint_noise,
+                           'constraint_mean'   : self.constraint_mean },
+                         fh)
+            fh.close()
+    
+            # Use an atomic move for better NFS happiness.
+            if os.name =='nt':
+    			cmd = 'move "%s" "%s"' % (fh.name, self.state_pkl)
+            else:
+    			cmd = 'mv "%s" "%s"' % (fh.name, self.state_pkl)
+            os.system(cmd) # TODO: Should check system-dependent return status.
 
         # Write the hyperparameters out to a human readable file as well
         fh    = open(self.stats_file, 'w')
@@ -141,54 +142,54 @@ class GPConstrainedEIChooser:
 
     def _real_init(self, dims, values, durations):
 
-        self.locker.lock_wait(self.state_pkl)
+        with self.state_lock:
+            sys.stderr.write("...acquired\n")
+    
+            self.randomstate = npr.get_state()
+            if os.path.exists(self.state_pkl):            
+                fh    = open(self.state_pkl, 'r')
+                state = cPickle.load(fh)
+                fh.close()
+    
+                self.D                = state['dims']
+                self.ls               = state['ls']
+                self.amp2             = state['amp2']
+                self.noise            = state['noise']
+                self.mean             = state['mean']
+                self.constraint_ls    = state['constraint_ls']
+                self.constraint_amp2  = state['constraint_amp2']
+                self.constraint_noise = state['constraint_noise']
+                self.constraint_mean  = state['constraint_mean']
+                self.constraint_gain  = state['constraint_mean']
+                self.needs_burnin     = False
+            else:
+    
+                # Identify constraint violations
+                # Note that we'll treat NaNs and Infs as these values as well 
+                # as an optional user defined value
+                goodvals = np.nonzero(np.logical_and(values != self.bad_value,
+                                                     np.isfinite(values)))[0]
+    
+                # Input dimensionality.
+                self.D = dims
+    
+                # Initial length scales.
+                self.ls = np.ones(self.D)
+                self.constraint_ls = np.ones(self.D)
+    
+                # Initial amplitude.
+                self.amp2 = np.std(values[goodvals])
+                self.constraint_amp2 = 1#np.std(durations)
+    
+                # Initial observation noise.
+                self.noise = 1e-3
+                self.constraint_noise = 1e-3
+                self.constraint_gain = 1
+    
+                # Initial mean.
+                self.mean = np.mean(values[goodvals])
+                self.constraint_mean = 0.5
 
-        self.randomstate = npr.get_state()
-        if os.path.exists(self.state_pkl):
-            fh    = open(self.state_pkl, 'r')
-            state = cPickle.load(fh)
-            fh.close()
-
-            self.D                = state['dims']
-            self.ls               = state['ls']
-            self.amp2             = state['amp2']
-            self.noise            = state['noise']
-            self.mean             = state['mean']
-            self.constraint_ls    = state['constraint_ls']
-            self.constraint_amp2  = state['constraint_amp2']
-            self.constraint_noise = state['constraint_noise']
-            self.constraint_mean  = state['constraint_mean']
-            self.constraint_gain  = state['constraint_gain']
-            self.needs_burnin     = False
-        else:
-
-            # Identify constraint violations
-            # Note that we'll treat NaNs and Infs as these values as well
-            # as an optional user defined value
-            goodvals = np.nonzero(np.logical_and(values != self.bad_value,
-                                                 np.isfinite(values)))[0]
-
-            # Input dimensionality.
-            self.D = dims
-
-            # Initial length scales.
-            self.ls = np.ones(self.D)
-            self.constraint_ls = np.ones(self.D)
-
-            # Initial amplitude.
-            self.amp2 = np.std(values[goodvals])+1e-4
-            self.constraint_amp2 = 1.0
-
-            # Initial observation noise.
-            self.noise = 1e-3
-            self.constraint_noise = 1e-3
-            self.constraint_gain = 1
-
-            # Initial mean.
-            self.mean = np.mean(values[goodvals])
-            self.constraint_mean = 0.5
-
-        self.locker.unlock(self.state_pkl)
 
     def cov(self, amp2, ls, x1, x2=None):
         if x2 is None:

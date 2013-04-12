@@ -28,7 +28,7 @@ import numpy        as np
 import numpy.random as npr
 
 from spearmint_pb2 import *
-from Locker        import *
+from lockfile import FileLock
 from sobol_lib     import *
 from helpers       import *
 
@@ -62,10 +62,10 @@ class ExperimentGrid:
     def __init__(self, expt_dir, variables=None, grid_size=None, grid_seed=1):
         self.expt_dir = expt_dir
         self.jobs_pkl = os.path.join(expt_dir, EXPERIMENT_GRID_FILE)
-        self.locker   = Locker()
+        self.locker = FileLock(self.jobs_pkl);
 
         # Only one process at a time is allowed to have access to the grid.
-        self.locker.lock_wait(self.jobs_pkl)
+        self.locker.acquire();
 
         # Set up the grid for the first time if it doesn't exist.
         if variables is not None and not os.path.exists(self.jobs_pkl):
@@ -85,10 +85,8 @@ class ExperimentGrid:
 
     def __del__(self):
         self._save_jobs()
-        if self.locker.unlock(self.jobs_pkl):
-            pass
-        else:
-            raise Exception("Could not release lock on job grid.\n")
+        self.locker.release()
+        sys.stderr.write("Released lock on job grid.\n")
 
     def get_grid(self):
         return self.grid, self.values, self.durs
@@ -186,7 +184,10 @@ class ExperimentGrid:
         fh.close()
 
         # Use an atomic move for better NFS happiness.
-        cmd = 'mv "%s" "%s"' % (fh.name, self.jobs_pkl)
+        if os.name =='nt':
+			cmd = 'move "%s" "%s"' % (fh.name, self.jobs_pkl)
+        else:
+			cmd = 'mv "%s" "%s"' % (fh.name, self.jobs_pkl)
         os.system(cmd) # TODO: Should check system-dependent return status.
 
     def _hypercube_grid(self, dims, size):

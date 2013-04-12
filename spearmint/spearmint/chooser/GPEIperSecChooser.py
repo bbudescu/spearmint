@@ -32,8 +32,7 @@ import scipy.optimize as spo
 import cPickle
 
 from helpers import *
-from Locker  import *
-
+from lockfile import FileLock
 def init(expt_dir, arg_string):
     args = util.unpack_args(arg_string)
     return GPEIperSecChooser(expt_dir, **args)
@@ -52,8 +51,8 @@ class GPEIperSecChooser:
                  pending_samples=100, noiseless=False, burnin=100,
                  grid_subset=20):
         self.cov_func        = getattr(gp, covar)
-        self.locker          = Locker()
         self.state_pkl       = os.path.join(expt_dir, self.__module__ + ".pkl")
+        self.state_lock      = FileLock(self.state_pkl)
 
         self.stats_file      = os.path.join(expt_dir,
                                    self.__module__ + "_hyperparameters.txt")
@@ -80,8 +79,8 @@ class GPEIperSecChooser:
     # A simple function to dump out hyperparameters to allow for a hot start
     # if the optimization is restarted.
     def dump_hypers(self):
-        self.locker.lock_wait(self.state_pkl)
-
+        with self.state_lock:
+    
         # Write the hyperparameters out to a Pickle.
         fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
         cPickle.dump({ 'dims'        : self.D,
@@ -95,21 +94,22 @@ class GPEIperSecChooser:
                        'time_mean'   : self.time_mean },
                      fh)
         fh.close()
-
+    
         # Use an atomic move for better NFS happiness.
+            if os.name =='nt':
+    			cmd = 'move "%s" "%s"' % (fh.name, self.state_pkl)
+            else:
         cmd = 'mv "%s" "%s"' % (fh.name, self.state_pkl)
         os.system(cmd) # TODO: Should check system-dependent return status.
 
-        self.locker.unlock(self.state_pkl)
-
     def _real_init(self, dims, values, durations):
-        self.locker.lock_wait(self.state_pkl)
-
+        with self.state_lock:
+    
         if os.path.exists(self.state_pkl):
             fh    = open(self.state_pkl, 'r')
             state = cPickle.load(fh)
             fh.close()
-
+    
             self.D          = state['dims']
             self.ls         = state['ls']
             self.amp2       = state['amp2']
@@ -120,27 +120,25 @@ class GPEIperSecChooser:
             self.time_noise = state['time_noise']
             self.time_mean  = state['time_mean']
         else:
-
+    
             # Input dimensionality.
             self.D = dims
-
+    
             # Initial length scales.
             self.ls = np.ones(self.D)
             self.time_ls = np.ones(self.D)
-
+    
             # Initial amplitude.
             self.amp2 = np.std(values)+1e-4
             self.time_amp2 = np.std(durations)+1e-4
-
+    
             # Initial observation noise.
             self.noise = 1e-3
             self.time_noise = 1e-3
-
+    
             # Initial mean.
             self.mean = np.mean(values)
             self.time_mean = np.mean(np.log(durations))
-
-        self.locker.unlock(self.state_pkl)
 
     def cov(self, amp2, ls, x1, x2=None):
         if x2 is None:

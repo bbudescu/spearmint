@@ -61,9 +61,9 @@ def grad_dist2(ls, x1, x2=None):
     x1 = x1 / ls
     x2 = x2 / ls
     
-    N = x1.shape[0]
-    M = x2.shape[0]
-    D = x1.shape[1]
+    N = int(x1.shape[0])
+    M = int(x2.shape[0])
+    D = int(x1.shape[1])
     gX = np.zeros((x1.shape[0],x2.shape[0],x1.shape[1]))
 
     code = \
