@@ -74,7 +74,7 @@ class GPEIChooser:
                            'mean'   : self.mean },
                          fh)
             fh.close()
-    
+
             # Use an atomic move for better NFS happiness.
             if os.name =='nt':
                 cmd = 'move "%s" "%s"' % (fh.name, self.state_pkl)
@@ -88,7 +88,7 @@ class GPEIChooser:
                 fh    = open(self.state_pkl, 'r')
                 state = cPickle.load(fh)
                 fh.close()
-    
+
                 self.D     = state['dims']
                 self.ls    = state['ls']
                 self.amp2  = state['amp2']
