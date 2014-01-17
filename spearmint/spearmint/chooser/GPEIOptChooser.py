@@ -88,7 +88,7 @@ class GPEIOptChooser:
                            'noise'  : self.noise,
                            'hyper_samples' : self.hyper_samples,
                            'mean'   : self.mean },
-                        fh)
+                         fh)
             fh.close()
         
             # Use an atomic move for better NFS happiness.
