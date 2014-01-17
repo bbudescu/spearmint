@@ -146,7 +146,7 @@ class GPConstrainedEIChooser:
                 fh    = open(self.state_pkl, 'r')
                 state = cPickle.load(fh)
                 fh.close()
-    
+
                 self.D                = state['dims']
                 self.ls               = state['ls']
                 self.amp2             = state['amp2']
@@ -159,33 +159,32 @@ class GPConstrainedEIChooser:
                 self.constraint_gain  = state['constraint_mean']
                 self.needs_burnin     = False
             else:
-    
+
                 # Identify constraint violations
                 # Note that we'll treat NaNs and Infs as these values as well 
                 # as an optional user defined value
                 goodvals = np.nonzero(np.logical_and(values != self.bad_value,
                                                      np.isfinite(values)))[0]
-    
+
                 # Input dimensionality.
                 self.D = dims
-    
+
                 # Initial length scales.
                 self.ls = np.ones(self.D)
                 self.constraint_ls = np.ones(self.D)
-    
+
                 # Initial amplitude.
                 self.amp2 = np.std(values[goodvals])
                 self.constraint_amp2 = 1#np.std(durations)
-    
+
                 # Initial observation noise.
                 self.noise = 1e-3
                 self.constraint_noise = 1e-3
                 self.constraint_gain = 1
-    
+
                 # Initial mean.
                 self.mean = np.mean(values[goodvals])
                 self.constraint_mean = 0.5
-
 
     def cov(self, amp2, ls, x1, x2=None):
         if x2 is None:
