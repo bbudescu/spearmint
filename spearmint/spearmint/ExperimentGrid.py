@@ -86,7 +86,6 @@ class ExperimentGrid:
     def __del__(self):
         self._save_jobs()
         self.locker.release()
-        sys.stderr.write("Released lock on job grid.\n")
 
     def get_grid(self):
         return self.grid, self.values, self.durs

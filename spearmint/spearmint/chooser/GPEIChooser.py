@@ -64,9 +64,7 @@ class GPEIChooser:
         self.max_ls      = 2    # top-hat prior on length scales
 
     def __del__(self):
-        with self.state_lock:
-            sys.stderr.write("...acquired\n")
-    
+        with self.state_lock:    
             # Write the hyperparameters out to a Pickle.
             fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
             cPickle.dump({ 'dims'   : self.D,
@@ -86,8 +84,6 @@ class GPEIChooser:
 
     def _real_init(self, dims, values):
         with self.state_lock:
-            sys.stderr.write("...acquired\n")
-    
             if os.path.exists(self.state_pkl):            
                 fh    = open(self.state_pkl, 'r')
                 state = cPickle.load(fh)

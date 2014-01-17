@@ -35,8 +35,9 @@ import matplotlib.pyplot as plt
 import multiprocessing
 import copy
 
-from lockfile import FileLock
 from helpers import *
+from lockfile import FileLock
+
 # Wrapper function to pass to parallel ei optimization calls
 def optimize_pt(c, b, comp, pend, vals, labels, model):
     ret = spo.fmin_l_bfgs_b(model.grad_optimize_ei_over_hypers,
@@ -99,8 +100,6 @@ class GPConstrainedEIChooser:
     # if the optimization is restarted.
     def dump_hypers(self):
         with self.state_lock:
-            sys.stderr.write("...acquired\n")
-    
             # Write the hyperparameters out to a Pickle.
             fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
             cPickle.dump({ 'dims'        : self.D,
@@ -142,9 +141,7 @@ class GPConstrainedEIChooser:
 
     def _real_init(self, dims, values, durations):
 
-        with self.state_lock:
-            sys.stderr.write("...acquired\n")
-    
+        with self.state_lock:    
             self.randomstate = npr.get_state()
             if os.path.exists(self.state_pkl):            
                 fh    = open(self.state_pkl, 'r')
