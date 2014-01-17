@@ -4,7 +4,7 @@ import multiprocessing
 from dispatch import DispatchDriver
 from helpers  import *
 from runner   import job_runner
-from Locker   import Locker
+from lockfile import FileLock
 
 class LocalDriver(DispatchDriver):
     def submit_job(self, job):
@@ -13,8 +13,8 @@ class LocalDriver(DispatchDriver):
        name = "%s-%08d" % (job.name, job.id)
 
        # TODO: figure out if this is necessary....
-       locker = Locker()
-       locker.unlock(grid_for(job))
+       locker = Filelock(grid_for(job))
+       locker.release()
 
        proc = multiprocessing.Process(target=job_runner, args=[job])
        proc.start()
