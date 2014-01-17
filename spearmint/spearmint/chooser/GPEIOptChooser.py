@@ -82,13 +82,13 @@ class GPEIOptChooser:
         with self.locker:
             # Write the hyperparameters out to a Pickle.
             fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
-                cPickle.dump({ 'dims'   : self.D,
-                               'ls'     : self.ls,
-                               'amp2'   : self.amp2,
-                               'noise'  : self.noise,
-                               'hyper_samples' : self.hyper_samples,
-                               'mean'   : self.mean },
-                            fh)
+            cPickle.dump({ 'dims'   : self.D,
+                           'ls'     : self.ls,
+                           'amp2'   : self.amp2,
+                           'noise'  : self.noise,
+                           'hyper_samples' : self.hyper_samples,
+                           'mean'   : self.mean },
+                        fh)
             fh.close()
         
             # Use an atomic move for better NFS happiness.
