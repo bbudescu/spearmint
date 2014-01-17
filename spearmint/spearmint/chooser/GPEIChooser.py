@@ -50,8 +50,8 @@ class GPEIChooser:
     def __init__(self, expt_dir, covar="Matern52", mcmc_iters=10,
                  pending_samples=100, noiseless=False):
         self.cov_func        = getattr(gp, covar)
+        self.locker          = FileLock(self.state_pkl)
         self.state_pkl       = os.path.join(expt_dir, self.__module__ + ".pkl")
-        self.state_lock      = FileLock(self.state_pkl)
 
         self.mcmc_iters      = int(mcmc_iters)
         self.pending_samples = pending_samples
@@ -64,7 +64,7 @@ class GPEIChooser:
         self.max_ls      = 2    # top-hat prior on length scales
 
     def __del__(self):
-        with self.state_lock:    
+        with self.locker:    
             # Write the hyperparameters out to a Pickle.
             fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
             cPickle.dump({ 'dims'   : self.D,
@@ -83,7 +83,7 @@ class GPEIChooser:
             os.system(cmd) # TODO: Should check system-dependent return status.
 
     def _real_init(self, dims, values):
-        with self.state_lock:
+        with self.locker:
             if os.path.exists(self.state_pkl):            
                 fh    = open(self.state_pkl, 'r')
                 state = cPickle.load(fh)
@@ -95,22 +95,21 @@ class GPEIChooser:
                 self.noise = state['noise']
                 self.mean  = state['mean']
             else:
-    
+
                 # Input dimensionality.
                 self.D = dims
-    
+
                 # Initial length scales.
                 self.ls = np.ones(self.D)
-    
+
                 # Initial amplitude.
                 self.amp2 = np.std(values)
-    
+
                 # Initial observation noise.
                 self.noise = 1e-3
-    
+
                 # Initial mean.
                 self.mean = np.mean(values)
-
 
     def cov(self, x1, x2=None):
         if x2 is None:

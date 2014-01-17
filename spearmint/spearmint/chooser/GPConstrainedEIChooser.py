@@ -116,9 +116,9 @@ class GPConstrainedEIChooser:
     
             # Use an atomic move for better NFS happiness.
             if os.name =='nt':
-    			cmd = 'move "%s" "%s"' % (fh.name, self.state_pkl)
+                cmd = 'move "%s" "%s"' % (fh.name, self.state_pkl)
             else:
-    			cmd = 'mv "%s" "%s"' % (fh.name, self.state_pkl)
+                cmd = 'mv "%s" "%s"' % (fh.name, self.state_pkl)
             os.system(cmd) # TODO: Should check system-dependent return status.
 
         # Write the hyperparameters out to a human readable file as well
