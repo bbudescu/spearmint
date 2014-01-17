@@ -86,7 +86,7 @@ class GPEIOptChooser:
                                'ls'     : self.ls,
                                'amp2'   : self.amp2,
                                'noise'  : self.noise,
-                           'hyper_samples' : self.hyper_samples,
+                               'hyper_samples' : self.hyper_samples,
                                'mean'   : self.mean },
                          fh)
             fh.close()
