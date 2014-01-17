@@ -65,8 +65,8 @@ class GPConstrainedEIChooser:
                  grid_subset=20, constraint_violating_value=np.inf,
                  verbosity=0, visualize2D=False):
         self.cov_func        = getattr(gp, covar)
+        self.locker          = FileLock(self.state_pkl)
         self.state_pkl       = os.path.join(expt_dir, self.__module__ + ".pkl")
-        self.state_lock      = FileLock(self.state_pkl)
 
         self.stats_file      = os.path.join(expt_dir,
                                    self.__module__ + "_hyperparameters.txt")
@@ -99,7 +99,7 @@ class GPConstrainedEIChooser:
     # A simple function to dump out hyperparameters to allow for a hot start
     # if the optimization is restarted.
     def dump_hypers(self):
-        with self.state_lock:
+        with self.locker:
             # Write the hyperparameters out to a Pickle.
             fh = tempfile.NamedTemporaryFile(mode='w', delete=False)
             cPickle.dump({ 'dims'        : self.D,
@@ -140,8 +140,7 @@ class GPConstrainedEIChooser:
         fh.close()
 
     def _real_init(self, dims, values, durations):
-
-        with self.state_lock:    
+        with self.locker:    
             self.randomstate = npr.get_state()
             if os.path.exists(self.state_pkl):            
                 fh    = open(self.state_pkl, 'r')
